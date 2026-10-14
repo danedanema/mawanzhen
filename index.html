@@ -1,0 +1,1730 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>物态变化虚拟实验 · 动态可视化</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0d1017;
+    --panel: #151a23;
+    --line: #232a37;
+    --text: #e6ebf2;
+    --dim: #7d8899;
+    --accent: #4fd1c5;
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+                 "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+
+  .app { display: flex; width: 100%; height: 100dvh; }
+
+  .stage {
+    flex: 1 1 auto;
+    position: relative;
+    min-width: 0;
+    background: radial-gradient(ellipse at 50% 42%, #10151e 0%, #080a0f 100%);
+  }
+  #cv { display: block; width: 100%; height: 100%; }
+
+  /* 题目标签 */
+  .badge {
+    position: absolute;
+    top: 18px;
+    left: 18px;
+    background: rgba(79, 209, 197, 0.12);
+    border: 1px solid rgba(79, 209, 197, 0.4);
+    color: #9fd8d2;
+    font-size: 12px;
+    padding: 6px 14px;
+    border-radius: 20px;
+    letter-spacing: 0.5px;
+    backdrop-filter: blur(4px);
+    pointer-events: none;
+    font-family: -apple-system, "PingFang SC", sans-serif;
+    z-index: 10;
+    white-space: nowrap;
+  }
+
+  .panel {
+    flex: 0 0 370px;
+    background: var(--panel);
+    border-left: 1px solid var(--line);
+    overflow-y: auto;
+    padding: 22px 20px 40px;
+    scrollbar-width: thin;
+    scrollbar-color: #2b3446 transparent;
+  }
+  .panel::-webkit-scrollbar { width: 6px; }
+  .panel::-webkit-scrollbar-thumb { background: #2b3446; border-radius: 3px; }
+
+  .title { font-size: 16px; font-weight: 700; letter-spacing: .3px; }
+  .subtitle { font-size: 11.5px; color: var(--dim); margin-top: 4px; line-height: 1.5; }
+
+  .sec { margin-top: 20px; }
+  .sec-label {
+    font-size: 11px; font-weight: 600; letter-spacing: 1px;
+    color: var(--dim); text-transform: uppercase; margin-bottom: 10px;
+  }
+
+  .materials { display: flex; flex-wrap: wrap; gap: 7px; }
+  .matbtn {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 8px 13px; border-radius: 8px;
+    background: #1c222d; border: 1px solid #262e3d;
+    color: #aab5c5; font-size: 12.5px; cursor: pointer;
+    transition: all .15s; font-family: inherit;
+  }
+  .matbtn:hover { background: #222a38; color: #d8e0ea; }
+  .matbtn.active {
+    background: rgba(79,209,197,.12);
+    border-color: rgba(79,209,197,.55);
+    color: var(--accent);
+  }
+  .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+
+  .slider-row { margin-bottom: 18px; }
+  .slider-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: 9px;
+  }
+  .slider-name { font-size: 13px; color: #c3ccd9; }
+  .slider-val {
+    font-size: 13.5px; font-weight: 600; color: var(--accent);
+    font-variant-numeric: tabular-nums;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  input[type=range] {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; height: 4px; border-radius: 2px;
+    background: #232a37; outline: none; cursor: pointer;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 17px; height: 17px; border-radius: 50%;
+    background: var(--accent); border: 3px solid var(--panel);
+    box-shadow: 0 0 0 1px var(--accent), 0 2px 8px rgba(79,209,197,.35);
+    transition: transform .1s;
+  }
+  input[type=range]::-webkit-slider-thumb:active { transform: scale(1.15); }
+  input[type=range]::-moz-range-thumb {
+    width: 13px; height: 13px; border-radius: 50%;
+    background: var(--accent); border: 3px solid var(--panel);
+    box-shadow: 0 0 0 1px var(--accent);
+  }
+
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pbtn {
+    padding: 6px 11px; border-radius: 7px; font-size: 12px;
+    background: #1c222d; border: 1px solid #262e3d; color: #96a2b3;
+    cursor: pointer; transition: all .15s; font-family: inherit;
+  }
+  .pbtn:hover { background: #232b3a; color: #d8e0ea; border-color: #364154; }
+
+  .readout { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .card {
+    background: #1a1f2a; border: 1px solid #232b38;
+    border-radius: 10px; padding: 12px 13px; min-width: 0;
+  }
+  .card.wide { grid-column: 1 / -1; }
+  .card-lbl { font-size: 11px; color: var(--dim); margin-bottom: 5px; white-space: nowrap; }
+  .card-num {
+    font-size: 17px; font-weight: 600; letter-spacing: -.3px;
+    font-variant-numeric: tabular-nums;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .card-num small { font-size: 11px; font-weight: 500; color: var(--dim); margin-left: 3px; }
+
+  .phaserow { display: flex; gap: 6px; margin-top: 4px; }
+  .phase-chip {
+    flex: 1; text-align: center; padding: 8px 4px;
+    border-radius: 8px; font-size: 11.5px;
+    background: #1c232f; color: #6b7688;
+    border: 1px solid #262e3d;
+    transition: all .25s; position: relative;
+  }
+  .phase-chip.on {
+    color: #fff; font-weight: 700;
+    border-color: transparent;
+    box-shadow: 0 0 16px -2px currentColor;
+  }
+  .phase-desc {
+    margin-top: 10px; font-size: 11.5px; color: #8fa5a8;
+    line-height: 1.65; padding: 10px 12px;
+    background: rgba(79,209,197,.05);
+    border: 1px solid rgba(79,209,197,.12);
+    border-radius: 8px;
+  }
+  .phase-desc b { color: #9fd8d2; }
+
+  .note {
+    margin-top: 20px; padding: 12px 13px;
+    background: rgba(79,209,197,.055);
+    border: 1px solid rgba(79,209,197,.16);
+    border-radius: 9px;
+    font-size: 11.5px; color: #8fa5a8; line-height: 1.7;
+  }
+  .note b { color: #9fd8d2; font-weight: 600; }
+  .note code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: #b7d6d2; font-size: 11px;
+  }
+
+  @media (max-width: 900px) {
+    .app { flex-direction: column; }
+    .stage { flex: 1 1 auto; min-height: 46vh; }
+    .panel {
+      flex: 0 0 auto; max-height: 54vh;
+      border-left: none; border-top: 1px solid var(--line);
+      padding: 18px 16px 32px;
+    }
+    .badge { top: 12px; left: 12px; font-size: 11px; padding: 5px 12px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <div class="stage" id="stage">
+    <canvas id="cv"></canvas>
+    <div class="badge">初二（9）班 马万禛</div>
+  </div>
+
+  <aside class="panel">
+    <div class="title">物态变化 · 动态实验</div>
+    <div class="subtitle">调节温度与压力，观察样品形态与动态变化</div>
+
+    <div class="sec">
+      <div class="sec-label">样品</div>
+      <div class="materials" id="matBtns"></div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-label">环境参数</div>
+      <div class="slider-row">
+        <div class="slider-head">
+          <span class="slider-name" id="lblT">温度</span>
+          <span class="slider-val" id="vT">25 °C</span>
+        </div>
+        <input type="range" id="sT" min="-50" max="200" step="1" value="25">
+      </div>
+      <div class="slider-row" style="margin-bottom:0">
+        <div class="slider-head">
+          <span class="slider-name" id="lblP">压力</span>
+          <span class="slider-val" id="vP">101 kPa</span>
+        </div>
+        <input type="range" id="sP" min="10" max="500" step="1" value="101">
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-label">快速预设</div>
+      <div class="presets" id="presets"></div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-label">实时状态</div>
+      <div class="readout" id="readout"></div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-label">物态</div>
+      <div class="phaserow" id="phaserow"></div>
+      <div class="phase-desc" id="phaseDesc"></div>
+    </div>
+
+    <div class="note" id="note"></div>
+  </aside>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ==================== 工具 ==================== */
+  const $ = id => document.getElementById(id);
+  const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const rand = n => { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+  const mixC = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
+  const lightC = (c, a) => mixC(c, [255, 255, 255], a);
+  const darkC = (c, a) => mixC(c, [0, 0, 0], a);
+  const rgbS = c => `rgb(${c[0] | 0},${c[1] | 0},${c[2] | 0})`;
+  const rgbaS = (c, a) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
+
+  function roundRect(c, x, y, w, h, r) {
+    c.beginPath();
+    if (c.roundRect) { c.roundRect(x, y, w, h, r); return; }
+    c.moveTo(x + r, y);
+    c.arcTo(x + w, y, x + w, y + h, r);
+    c.arcTo(x + w, y + h, x, y + h, r);
+    c.arcTo(x, y + h, x, y, r);
+    c.arcTo(x, y, x + w, y, r);
+    c.closePath();
+  }
+
+  function boilPoint(P) {
+    const mmHg = P * 7.500617;
+    const A = 8.07131, B = 1730.63, C = 233.426;
+    const v = A - Math.log10(mmHg);
+    if (v <= 0.5) return 374;
+    return B / v - C;
+  }
+
+  /* ==================== 画布 ==================== */
+  const stage = $('stage');
+  const canvas = $('cv');
+  const ctx = canvas.getContext('2d');
+  let W = 0, H = 0;
+
+  /* 安全区布局：样品居中于 HUD 与底边之间，避免文字重叠 */
+  let LAYOUT = { cx: 0, cy: 0, R: 60, topSafe: 92, botSafe: 0, availH: 0 };
+
+  function computeLayout() {
+    const topSafe = 92;
+    const botSafe = H - 30;
+    const availH = Math.max(140, botSafe - topSafe);
+    const cx = W / 2;
+    const cy = topSafe + availH / 2;
+    const R = Math.min(Math.min(W, availH) * 0.19, (availH - 110) / 2);
+    LAYOUT = { cx, cy, R, topSafe, botSafe, availH };
+  }
+
+  function resize() {
+    const rect = stage.getBoundingClientRect();
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = Math.max(1, rect.width);
+    H = Math.max(1, rect.height);
+    canvas.width = Math.floor(W * dpr);
+    canvas.height = Math.floor(H * dpr);
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    computeLayout();
+  }
+  new ResizeObserver(resize).observe(stage);
+  resize();
+
+  /* ==================== 状态 ==================== */
+  const state = { mat: 'water', T: 25, P: 101 };
+  let res = null;
+  let prevPhase = null;
+  let phaseChangeT = -10;
+
+  /* ==================== 画布注释（固定在安全区内） ==================== */
+  function canvasNote(text, x, y, color, kind) {
+    const title = kind === 'title';
+    const fs = title ? 16 : 12.5;
+    const padX = title ? 14 : 11;
+    const padY = title ? 8 : 6;
+
+    ctx.font = `600 ${fs}px -apple-system, "PingFang SC", sans-serif`;
+    const tw = ctx.measureText(text).width;
+    const w = tw + padX * 2;
+    const h = fs + padY * 2;
+    const x0 = x - w / 2;
+    const y0 = y - h / 2;
+
+    ctx.save();
+    roundRect(ctx, x0, y0, w, h, h / 2);
+    ctx.fillStyle = 'rgba(10, 14, 22, 0.92)';
+    ctx.fill();
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = 0.55;
+    ctx.lineWidth = 1.4;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = color;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, x, y + 1);
+    ctx.restore();
+  }
+
+  /* 统一的标注绘制：标题在上、动作在下，均在安全区内 */
+  function drawAnnotations(r, act) {
+    const { cx, cy, R, topSafe, botSafe } = LAYOUT;
+    const titleY = Math.max(topSafe + 18, cy - R - 30);
+    const actionY = Math.min(botSafe - 18, cy + R + 30);
+    canvasNote(r.name, cx, titleY, r.color, 'title');
+    canvasNote(act, cx, actionY, r.color, 'sub');
+  }
+
+  /* ==================== 动态脉冲环 ==================== */
+  function pulseRing(cx, cy, R, t, color) {
+    if (t - phaseChangeT > 1.6) return;
+    const p = (t - phaseChangeT) / 1.6;
+    const rr = R * (1 + p * 0.75);
+    ctx.beginPath();
+    ctx.arc(cx, cy, rr, 0, Math.PI * 2);
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = (1 - p) * 0.45;
+    ctx.lineWidth = 3 * (1 - p) + 1;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  /* ==================== 材料库 ==================== */
+  const MATS = {
+
+    /* ---------------------------------------- 水 */
+    water: {
+      name: '水', sub: 'H₂O', dot: '#5cc8ff',
+      sliders: {
+        T: { min: -50, max: 200, step: 1, def: 25, label: '温度', unit: '°C' },
+        P: { min: 10, max: 500, step: 1, def: 101, label: '气压', unit: 'kPa' }
+      },
+      presets: [
+        { label: '常温', T: 25, P: 101 },
+        { label: '结冰', T: -25, P: 101 },
+        { label: '沸腾', T: 120, P: 101 },
+        { label: '高原', T: 80, P: 50 },
+        { label: '高压锅', T: 130, P: 250 }
+      ],
+      compute(s) {
+        const Tb = boilPoint(s.P);
+        if (s.T < 0) return { phase: 'ice', name: '固态 · 冰晶', color: '#a8dcff', Tb };
+        if (s.T < Tb) return { phase: 'liquid', name: '液态 · 水滴', color: '#5cc8ff', Tb };
+        return { phase: 'gas', name: '气态 · 水蒸气', color: '#d8ecff', Tb };
+      },
+      action(s, r) {
+        if (r.phase === 'ice') {
+          return s.T < -30 ? '❄ 深冷凝固 · 六角冰晶致密生长' : '❄ 凝固中 · 水分子排列成六角晶格';
+        }
+        if (r.phase === 'liquid') {
+          if (s.T > r.Tb - 12) return '💨 蒸发加剧 · 接近沸点';
+          if (s.T > 55) return '💨 缓慢蒸发 · 分子逸出液面';
+          if (s.T < 8) return '❄ 接近凝固点 · 分子运动减慢';
+          return '💧 液态 · 分子自由流动';
+        }
+        return s.T > r.Tb + 30 ? '💨 剧烈汽化 · 水分子高速挣脱液面' : '💨 沸腾 · 内部汽泡翻涌';
+      },
+      draw(s, r, t) {
+        const { cx, cy, R } = LAYOUT;
+        pulseRing(cx, cy, R * 1.4, t, r.color);
+
+        if (r.phase === 'ice') drawIce(cx, cy, R, t);
+        else if (r.phase === 'liquid') drawWaterDrop(cx, cy, R, t, s);
+        else drawSteam(cx, cy, R, t, s);
+
+        drawAnnotations(r, this.action(s, r));
+      },
+      hudText(r) { return r.name; },
+      hudColor(r) { return r.color; },
+      readouts(s, r) {
+        return [
+          { label: '物态', value: r.name, color: r.color, wide: true },
+          { label: '沸点', value: r.Tb.toFixed(1), unit: '°C' },
+          { label: '温度', value: s.T, unit: '°C' }
+        ];
+      },
+      phases: [
+        { key: 'ice', name: '冰晶', color: '#2c5f8a' },
+        { key: 'liquid', name: '液态', color: '#1f6f96' },
+        { key: 'gas', name: '气态', color: '#3a5f80' }
+      ],
+      phaseDesc(s, r) {
+        if (r.phase === 'ice') {
+          return '温度低于 0 °C，水分子通过氢键排列成<b>六角冰晶</b>，体积膨胀约 9%，密度降低。';
+        }
+        if (r.phase === 'liquid') {
+          return `0 °C 到沸点 <b>${r.Tb.toFixed(1)} °C</b> 之间，水保持液态，分子间保持氢键但可自由流动。当前气压 ${s.P} kPa。`;
+        }
+        return `温度超过沸点 <b>${r.Tb.toFixed(1)} °C</b>，水剧烈汽化，分子完全挣脱液态束缚成为水蒸气。`;
+      },
+      note: `<b>模型说明</b><br>
+        水的物态由 <b>温度</b> 与 <b>气压</b> 共同决定：<br>
+        · T &lt; 0 °C → 六角冰晶（体积膨胀 9%）<br>
+        · 0 °C ≤ T &lt; 沸点 → 水滴（表面张力呈球形）<br>
+        · T ≥ 沸点 → 水蒸气（无色气体）<br><br>
+        沸点由 <b>Antoine 方程</b> 随气压变化：<br>
+        <code>log₁₀P = A − B/(T+C)</code><br>
+        气压越低，沸点越低（高原）；气压越高，沸点越高（高压锅）。`
+    },
+
+    /* ---------------------------------------- 汞 */
+    mercury: {
+      name: '汞', sub: 'Hg · 水银', dot: '#c8d0dc',
+      sliders: {
+        T: { min: -60, max: 400, step: 1, def: 25, label: '温度', unit: '°C' },
+        P: { min: 10, max: 500, step: 1, def: 101, label: '气压', unit: 'kPa' }
+      },
+      presets: [
+        { label: '常温液态', T: 25, P: 101 },
+        { label: '低温凝固', T: -50, P: 101 },
+        { label: '沸腾汽化', T: 370, P: 101 },
+        { label: '低压沸腾', T: 320, P: 40 }
+      ],
+      compute(s) {
+        const Tb = 356.7;
+        if (s.T < -38.83) return { phase: 'solid', name: '固态 · 汞', color: '#a8b0c0', Tb };
+        if (s.T < Tb) return { phase: 'liquid', name: '液态 · 水银', color: '#c8d0dc', Tb };
+        return { phase: 'gas', name: '气态 · 汞蒸气', color: '#c0a8e0', Tb };
+      },
+      action(s, r) {
+        if (r.phase === 'solid') return '❄ 凝固 · 液态金属失去流动性';
+        if (r.phase === 'liquid') {
+          if (s.T > r.Tb - 40) return '💨 蒸发加剧 · 汞原子逸出液面';
+          if (s.T < -20) return '❄ 接近凝固点 · 流动性降低';
+          return '💧 液态金属 · 表面张力呈完美球形';
+        }
+        return '💨 沸腾汽化 · 有毒汞蒸气上升';
+      },
+      draw(s, r, t) {
+        const { cx, cy, R } = LAYOUT;
+        pulseRing(cx, cy, R * 1.4, t, r.color);
+
+        if (r.phase === 'solid') drawMercurySolid(cx, cy, R, t);
+        else if (r.phase === 'liquid') drawMercuryLiquid(cx, cy, R, t);
+        else drawMercuryGas(cx, cy, R, t);
+
+        drawAnnotations(r, this.action(s, r));
+      },
+      hudText(r) { return r.name; },
+      hudColor(r) { return r.color; },
+      readouts(s, r) {
+        return [
+          { label: '物态', value: r.name, color: r.color, wide: true },
+          { label: '熔点', value: '-38.8', unit: '°C' },
+          { label: '沸点', value: '356.7', unit: '°C' }
+        ];
+      },
+      phases: [
+        { key: 'solid', name: '固态', color: '#4a5568' },
+        { key: 'liquid', name: '液态', color: '#4a6a8a' },
+        { key: 'gas', name: '气态', color: '#5a4a7a' }
+      ],
+      phaseDesc(s, r) {
+        if (r.phase === 'solid') {
+          return '温度低于 <b>-38.8 °C</b>，汞凝固为固态金属，失去流动性，表面变暗。';
+        }
+        if (r.phase === 'liquid') {
+          return `<b>-38.8 °C 到 356.7 °C</b> 之间，汞保持液态，表面张力极大，呈完美球形。当前 ${s.T} °C。`;
+        }
+        return '温度超过 <b>356.7 °C</b>，汞沸腾汽化，产生有毒的紫灰色汞蒸气。';
+      },
+      note: `<b>模型说明</b><br>
+        汞是常温下唯一的液态金属。<br><br>
+        · <b>T &lt; -38.8 °C</b>：凝固为固态汞<br>
+        · <b>-38.8 ~ 356.7 °C</b>：液态水银，表面张力极大<br>
+        · <b>T ≥ 356.7 °C</b>：汽化为汞蒸气（剧毒）<br><br>
+        汞的沸点随气压变化，气压越低沸点越低。`
+    },
+
+    /* ---------------------------------------- 碳 */
+    carbon: {
+      name: '碳', sub: 'C · 石墨', dot: '#5a5e68',
+      sliders: {
+        T: { min: 20, max: 1500, step: 5, def: 25, label: '温度', unit: '°C' },
+        P: { min: 10, max: 1000, step: 1, def: 101, label: '压力', unit: 'kPa' }
+      },
+      presets: [
+        { label: '常温石墨', T: 25, P: 101 },
+        { label: '暗红热', T: 600, P: 101 },
+        { label: '剧烈燃烧', T: 900, P: 101 },
+        { label: '高压钻石', T: 1200, P: 900 }
+      ],
+      compute(s) {
+        if (s.T >= 900 && s.P >= 700)
+          return { phase: 'diamond', name: '钻石 · 碳晶体', color: '#b8e8ff' };
+        if (s.T >= 450)
+          return { phase: 'burning', name: '燃烧 · 石墨氧化', color: '#ff8a3c' };
+        if (s.T >= 300)
+          return { phase: 'glowing', name: '炽热 · 石墨发红', color: '#c06030' };
+        return { phase: 'graphite', name: '固态 · 石墨', color: '#7a808c' };
+      },
+      action(s, r) {
+        if (r.phase === 'graphite') return '🪨 稳定 · 六方层状结构';
+        if (r.phase === 'glowing') return '🔥 升温 · 石墨开始发出暗红光';
+        if (r.phase === 'burning') return '🔥 氧化反应 · 碳与氧剧烈燃烧';
+        return '💎 碳原子重排 · 立方晶格形成';
+      },
+      draw(s, r, t) {
+        const { cx, cy, R } = LAYOUT;
+        pulseRing(cx, cy, R * 1.4, t, r.color);
+
+        if (r.phase === 'diamond') drawDiamond(cx, cy, R * 1.15, t);
+        else drawCarbonBody(cx, cy, R * 1.1, r, t, s);
+
+        drawAnnotations(r, this.action(s, r));
+      },
+      hudText(r) { return r.name; },
+      hudColor(r) { return r.color; },
+      readouts(s, r) {
+        return [
+          { label: '状态', value: r.name, color: r.color, wide: true },
+          { label: '温度', value: s.T, unit: '°C' },
+          { label: '压力', value: s.P, unit: 'kPa' }
+        ];
+      },
+      phases: [
+        { key: 'graphite', name: '石墨', color: '#4a4e58' },
+        { key: 'glowing', name: '炽热', color: '#8a3a1a' },
+        { key: 'burning', name: '燃烧', color: '#aa4a18' },
+        { key: 'diamond', name: '钻石', color: '#3a6a8a' }
+      ],
+      phaseDesc(s, r) {
+        if (r.phase === 'graphite')
+          return '常温常压下碳以<b>石墨</b>形式存在，六方层状结构，柔软黑色。';
+        if (r.phase === 'glowing')
+          return '温度升高，石墨开始发出<b>暗红色</b>热辐射光。';
+        if (r.phase === 'burning')
+          return `温度超过 <b>450 °C</b>，碳与氧气剧烈反应，产生火焰和热量。`;
+        return `高温 <b>${s.T} °C</b> 加高压 <b>${s.P} kPa</b>，碳原子重排为金刚石结构（示意，实际需 GPa 级压力）。`;
+      },
+      note: `<b>模型说明</b><br>
+        · <b>T &lt; 300 °C</b>：石墨，黑色固体<br>
+        · <b>300 ~ 450 °C</b>：炽热发红<br>
+        · <b>T ≥ 450 °C</b>：氧化燃烧，产生火焰<br>
+        · <b>T ≥ 900 °C 且 P ≥ 700 kPa</b>：转变为钻石（示意）<br><br>
+        现实中石墨→钻石需要约 <b>5 GPa、1500 °C</b>，本实验为便于观察已大幅降低条件。`
+    },
+
+    /* ---------------------------------------- 碘 */
+    iodine: {
+      name: '碘', sub: 'I₂', dot: '#9a6ec0',
+      sliders: {
+        T: { min: 20, max: 250, step: 1, def: 25, label: '温度', unit: '°C' },
+        P: { min: 10, max: 500, step: 1, def: 101, label: '气压', unit: 'kPa' }
+      },
+      presets: [
+        { label: '常温晶体', T: 25, P: 101 },
+        { label: '升华', T: 95, P: 101 },
+        { label: '熔化', T: 140, P: 101 },
+        { label: '沸腾', T: 200, P: 101 },
+        { label: '低压升华', T: 70, P: 30 }
+      ],
+      compute(s) {
+        if (s.T >= 184) return { phase: 'gas', name: '气态 · 碘蒸气', color: '#c8a0e8' };
+        if (s.T >= 113.7) return { phase: 'liquid', name: '液态 · 碘', color: '#a070d0' };
+        return { phase: 'solid', name: '固态 · 碘晶体', color: '#8a5ab0' };
+      },
+      action(s, r) {
+        if (r.phase === 'gas') return '💨 沸腾汽化 · 紫色蒸气充满容器';
+        if (r.phase === 'liquid') {
+          if (s.T > 160) return '💨 蒸发加剧 · 紫色蒸气上升';
+          return '🌡 熔化 · 深紫色液体流动';
+        }
+        if (s.T > 60) return '💨 升华 · 紫色蒸气从晶体表面逸出';
+        return '❄ 稳定晶体 · 紫黑色金属光泽';
+      },
+      draw(s, r, t) {
+        const { cx, cy, R } = LAYOUT;
+        pulseRing(cx, cy, R * 1.4, t, r.color);
+
+        if (r.phase === 'gas') drawIodineGas(cx, cy, R, t);
+        else if (r.phase === 'liquid') drawIodineLiquid(cx, cy, R, t);
+        else drawIodineSolid(cx, cy, R, t, s);
+
+        drawAnnotations(r, this.action(s, r));
+      },
+      hudText(r) { return r.name; },
+      hudColor(r) { return r.color; },
+      readouts(s, r) {
+        return [
+          { label: '物态', value: r.name, color: r.color, wide: true },
+          { label: '熔点', value: '113.7', unit: '°C' },
+          { label: '沸点', value: '184.3', unit: '°C' }
+        ];
+      },
+      phases: [
+        { key: 'solid', name: '固态', color: '#5a3a7a' },
+        { key: 'liquid', name: '液态', color: '#6a4a8a' },
+        { key: 'gas', name: '气态', color: '#7a5a9a' }
+      ],
+      phaseDesc(s, r) {
+        if (r.phase === 'solid') {
+          if (s.T > 60) return `温度 <b>${s.T} °C</b>，碘晶体正在<b>升华</b>，紫色蒸气直接从固体表面逸出（固体不经过液态直接变气态）。`;
+          return '常温下碘为紫黑色晶体，具有金属光泽，分子间靠范德华力结合。';
+        }
+        if (r.phase === 'liquid') {
+          return `温度 <b>${s.T} °C</b>，超过熔点 113.7 °C，碘熔化为深紫色液体。`;
+        }
+        return `温度 <b>${s.T} °C</b>，超过沸点 184.3 °C，碘剧烈汽化为紫色蒸气。`;
+      },
+      note: `<b>模型说明</b><br>
+        碘是典型的<b>易升华</b>元素。<br><br>
+        · <b>T &lt; 60 °C</b>：紫黑色晶体，稳定<br>
+        · <b>60 ~ 113.7 °C</b>：明显升华，紫色蒸气逸出<br>
+        · <b>113.7 ~ 184.3 °C</b>：液态，深紫色<br>
+        · <b>T ≥ 184.3 °C</b>：沸腾汽化，紫色蒸气<br><br>
+        气压越低，升华越容易发生。碘蒸气有毒，实验中需通风。`
+    }
+  };
+
+  /* ==================== 绘制：水 ==================== */
+  function drawIce(cx, cy, R, t) {
+    const g = ctx.createRadialGradient(cx, cy, R * 0.2, cx, cy, R * 2.2);
+    g.addColorStop(0, 'rgba(160,220,255,0.22)');
+    g.addColorStop(1, 'rgba(160,220,255,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(cx, cy, R * 2.2, 0, Math.PI * 2); ctx.fill();
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(t * 0.12);
+
+    for (let i = 0; i < 6; i++) {
+      ctx.save();
+      ctx.rotate((Math.PI / 3) * i);
+
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(0, -R * 1.4);
+      ctx.strokeStyle = 'rgba(200,235,255,0.9)';
+      ctx.lineWidth = 2.6;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+
+      const pos = [0.32, 0.52, 0.74];
+      const sizes = [0.38, 0.30, 0.20];
+      pos.forEach((p, k) => {
+        const y = -R * 1.4 * p;
+        const sl = R * 1.4 * sizes[k];
+        const a = Math.PI / 6;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(-sl * Math.cos(a), y - sl * Math.sin(a));
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(sl * Math.cos(a), y - sl * Math.sin(a));
+        ctx.stroke();
+      });
+
+      ctx.beginPath();
+      ctx.arc(0, -R * 1.4, 3, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(230,248,255,0.95)';
+      ctx.fill();
+
+      ctx.restore();
+    }
+
+    ctx.beginPath();
+    ctx.arc(0, 0, R * 0.16, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(220,245,255,0.95)';
+    ctx.fill();
+
+    ctx.restore();
+
+    for (let i = 0; i < 12; i++) {
+      const a = rand(i * 3.1) * Math.PI * 2;
+      const rr = R * (1.5 + rand(i * 7.7) * 0.8);
+      const px = cx + Math.cos(a + t * 0.2 * (rand(i) > 0.5 ? 1 : -1)) * rr;
+      const py = cy + Math.sin(a + t * 0.2 * (rand(i) > 0.5 ? 1 : -1)) * rr;
+      const sz = 2 + rand(i * 5.3) * 2.5;
+      ctx.save();
+      ctx.translate(px, py);
+      ctx.rotate(t * 0.3 + i);
+      ctx.beginPath();
+      for (let j = 0; j < 3; j++) {
+        ctx.rotate(Math.PI / 3);
+        ctx.moveTo(0, 0);
+        ctx.lineTo(0, -sz);
+      }
+      ctx.strokeStyle = `rgba(200,235,255,${0.25 + rand(i) * 0.3})`;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  function drawWaterDrop(cx, cy, R, t, s) {
+    const steamInt = clamp((s.T - 40) / 60, 0, 1);
+
+    const g = ctx.createRadialGradient(cx, cy, R * 0.3, cx, cy, R * 1.8);
+    g.addColorStop(0, 'rgba(90,180,240,0.25)');
+    g.addColorStop(1, 'rgba(90,180,240,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(cx, cy, R * 1.8, 0, Math.PI * 2); ctx.fill();
+
+    const wob = Math.sin(t * 2.2) * R * 0.018;
+    const w = R * 1.35, h = R * 1.7;
+    const hw = w / 2, hh = h / 2;
+
+    ctx.beginPath();
+    ctx.moveTo(cx + wob, cy - hh);
+    ctx.bezierCurveTo(cx + hw * 0.15, cy - hh * 0.55, cx + hw, cy - hh * 0.15, cx + hw, cy + hh * 0.35);
+    ctx.bezierCurveTo(cx + hw, cy + hh * 0.85, cx + hw * 0.55, cy + hh, cx, cy + hh);
+    ctx.bezierCurveTo(cx - hw * 0.55, cy + hh, cx - hw, cy + hh * 0.85, cx - hw, cy + hh * 0.35);
+    ctx.bezierCurveTo(cx - hw, cy - hh * 0.15, cx - hw * 0.15, cy - hh * 0.55, cx + wob, cy - hh);
+    ctx.closePath();
+
+    const gg = ctx.createRadialGradient(cx - hw * 0.3, cy - hh * 0.25, R * 0.1, cx, cy, R * 1.2);
+    gg.addColorStop(0, 'rgba(190,235,255,0.95)');
+    gg.addColorStop(0.5, 'rgba(80,175,240,0.9)');
+    gg.addColorStop(1, 'rgba(25,95,200,0.95)');
+    ctx.fillStyle = gg;
+    ctx.fill();
+
+    ctx.strokeStyle = 'rgba(200,240,255,0.55)';
+    ctx.lineWidth = 1.8;
+    ctx.stroke();
+
+    ctx.save();
+    ctx.clip();
+    for (let i = 0; i < 3; i++) {
+      const yy = cy - hh * 0.3 + (i / 2) * hh * 0.9;
+      ctx.beginPath();
+      for (let k = 0; k <= 20; k++) {
+        const px = cx - hw + (k / 20) * w;
+        const py = yy + Math.sin(k * 0.9 + t * 2 + i * 1.3) * 3;
+        k === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+      }
+      ctx.strokeStyle = `rgba(255,255,255,${0.15 + i * 0.05})`;
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    ctx.save();
+    ctx.translate(cx - hw * 0.3, cy - hh * 0.18);
+    ctx.rotate(-0.6);
+    const hg = ctx.createRadialGradient(0, 0, 0, 0, 0, R * 0.42);
+    hg.addColorStop(0, 'rgba(255,255,255,0.95)');
+    hg.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.beginPath();
+    ctx.ellipse(0, 0, R * 0.36, R * 0.18, 0, 0, Math.PI * 2);
+    ctx.fillStyle = hg;
+    ctx.fill();
+    ctx.restore();
+
+    ctx.save();
+    ctx.globalAlpha = 0.35;
+    ctx.beginPath();
+    ctx.ellipse(cx + hw * 0.22, cy + hh * 0.5, hw * 0.36, hh * 0.08, 0, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(210,245,255,1)';
+    ctx.fill();
+    ctx.restore();
+
+    if (steamInt > 0.05) {
+      const n = Math.round(steamInt * 16);
+      for (let i = 0; i < n; i++) {
+        const seed = i * 6.7 + 100;
+        const px = cx + (rand(seed) - 0.5) * w * 1.1;
+        const ph = (rand(seed + 3) + t * 0.35 * (0.5 + rand(seed + 5))) % 1;
+        const py = cy - hh * 0.5 - ph * R * 1.6;
+        const rr = R * (0.05 + rand(seed + 7) * 0.10) * (1 - ph * 0.4);
+        const a = steamInt * (0.3 + rand(seed + 9) * 0.4) * Math.sin(ph * Math.PI);
+        ctx.beginPath();
+        ctx.arc(px, py, rr, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(228,242,255,${a})`;
+        ctx.fill();
+      }
+    }
+  }
+
+  function drawSteam(cx, cy, R, t, s) {
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + R * 1.05, R * 1.15, R * 0.24, 0, 0, Math.PI * 2);
+    const lg = ctx.createRadialGradient(cx, cy + R * 1.05, 0, cx, cy + R * 1.05, R * 1.15);
+    lg.addColorStop(0, 'rgba(130,200,255,0.9)');
+    lg.addColorStop(1, 'rgba(40,110,200,0.7)');
+    ctx.fillStyle = lg;
+    ctx.fill();
+
+    for (let i = 0; i < 16; i++) {
+      const seed = i * 4.3 + 200;
+      const bx = cx + (rand(seed) - 0.5) * R * 2.1;
+      const ph = (rand(seed + 3) + t * 0.8) % 1;
+      const by = cy + R * 1.05 - ph * R * 0.45;
+      const br = R * (0.04 + rand(seed + 7) * 0.08) * (1 - ph * 0.6);
+      ctx.beginPath();
+      ctx.arc(bx, by, br, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(210,240,255,${0.5 * (1 - ph)})`;
+      ctx.fill();
+    }
+
+    for (let i = 0; i < 50; i++) {
+      const seed = i * 7.13 + 300;
+      const px = cx + (rand(seed) - 0.5) * R * 3.4;
+      const ph = (rand(seed + 3) + t * 0.18 * (0.5 + rand(seed + 5))) % 1;
+      const py = cy + R * 1.0 - ph * R * 2.4;
+      const size = R * (0.13 + rand(seed + 7) * 0.30) * (1 - ph * 0.4);
+      const alpha = (0.3 + rand(seed + 9) * 0.4) * Math.sin(ph * Math.PI);
+
+      const g = ctx.createRadialGradient(px, py, 0, px, py, size);
+      g.addColorStop(0, `rgba(228,242,255,${alpha})`);
+      g.addColorStop(1, 'rgba(228,242,255,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(px, py, size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  /* ==================== 绘制：汞 ==================== */
+  function drawMercurySolid(cx, cy, R, t) {
+    const glow = ctx.createRadialGradient(cx, cy, R * 0.3, cx, cy, R * 1.6);
+    glow.addColorStop(0, 'rgba(180,190,210,0.16)');
+    glow.addColorStop(1, 'rgba(180,190,210,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(cx, cy, R * 1.6, 0, Math.PI * 2); ctx.fill();
+
+    const w = R * 1.3, h = R * 1.3;
+    const dx = R * 0.36, dy = R * 0.22;
+    const x0 = cx - (w + dx) / 2;
+    const y0 = cy - h / 2 + dy / 2;
+
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x0 + dx, y0 - dy);
+    ctx.lineTo(x0 + w + dx, y0 - dy);
+    ctx.lineTo(x0 + w, y0);
+    ctx.closePath();
+    ctx.fillStyle = '#a8b0c0';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(60,70,90,0.5)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(x0 + w, y0);
+    ctx.lineTo(x0 + w + dx, y0 - dy);
+    ctx.lineTo(x0 + w + dx, y0 - dy + h);
+    ctx.lineTo(x0 + w, y0 + h);
+    ctx.closePath();
+    ctx.fillStyle = '#6a7280';
+    ctx.fill();
+    ctx.stroke();
+
+    const fg = ctx.createLinearGradient(x0, y0, x0 + w, y0 + h);
+    fg.addColorStop(0, '#c8d0dc');
+    fg.addColorStop(0.5, '#98a2b2');
+    fg.addColorStop(1, '#7882a0');
+    ctx.fillStyle = fg;
+    ctx.fillRect(x0, y0, w, h);
+    ctx.strokeStyle = 'rgba(60,70,90,0.5)';
+    ctx.strokeRect(x0, y0, w, h);
+
+    ctx.save();
+    ctx.globalAlpha = 0.35;
+    const hg = ctx.createLinearGradient(x0, y0, x0, y0 + h * 0.5);
+    hg.addColorStop(0, '#ffffff');
+    hg.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = hg;
+    ctx.fillRect(x0, y0, w, h * 0.5);
+    ctx.restore();
+
+    ctx.strokeStyle = 'rgba(80,90,110,0.4)';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 3; i++) {
+      ctx.beginPath();
+      const sx = x0 + rand(i * 3.1) * w;
+      const sy = y0 + rand(i * 7.7) * h;
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(sx + (rand(i * 2.3) - 0.5) * w * 0.5, sy + (rand(i * 5.1) - 0.5) * h * 0.5);
+      ctx.stroke();
+    }
+  }
+
+  function drawMercuryLiquid(cx, cy, R, t) {
+    const glow = ctx.createRadialGradient(cx, cy, R * 0.3, cx, cy, R * 1.8);
+    glow.addColorStop(0, 'rgba(200,215,235,0.28)');
+    glow.addColorStop(1, 'rgba(200,215,235,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(cx, cy, R * 1.8, 0, Math.PI * 2); ctx.fill();
+
+    const wob = 1 + Math.sin(t * 1.6) * 0.022;
+
+    ctx.save();
+    ctx.translate(cx, cy + R * 0.82);
+    ctx.scale(1, 0.24);
+    const sg = ctx.createRadialGradient(0, 0, 0, 0, 0, R * 0.85);
+    sg.addColorStop(0, 'rgba(0,0,0,0.42)');
+    sg.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.beginPath();
+    ctx.arc(0, 0, R * 0.85, 0, Math.PI * 2);
+    ctx.fillStyle = sg;
+    ctx.fill();
+    ctx.restore();
+
+    const rr = R * 0.98 * wob;
+    ctx.beginPath();
+    ctx.arc(cx, cy, rr, 0, Math.PI * 2);
+
+    const g = ctx.createRadialGradient(cx - rr * 0.35, cy - rr * 0.4, rr * 0.05, cx, cy, rr * 1.05);
+    g.addColorStop(0, 'rgba(255,255,255,1)');
+    g.addColorStop(0.25, 'rgba(220,230,245,1)');
+    g.addColorStop(0.6, 'rgba(155,170,195,1)');
+    g.addColorStop(0.85, 'rgba(110,125,150,1)');
+    g.addColorStop(1, 'rgba(75,88,110,1)');
+    ctx.fillStyle = g;
+    ctx.fill();
+
+    ctx.strokeStyle = 'rgba(240,248,255,0.5)';
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+
+    const hlX = cx - rr * 0.38 + Math.sin(t * 0.8) * rr * 0.05;
+    const hlY = cy - rr * 0.42 + Math.cos(t * 0.6) * rr * 0.04;
+    ctx.save();
+    ctx.translate(hlX, hlY);
+    ctx.rotate(-0.6);
+    const hg = ctx.createRadialGradient(0, 0, 0, 0, 0, rr * 0.4);
+    hg.addColorStop(0, 'rgba(255,255,255,1)');
+    hg.addColorStop(0.5, 'rgba(255,255,255,0.5)');
+    hg.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.beginPath();
+    ctx.ellipse(0, 0, rr * 0.34, rr * 0.18, 0, 0, Math.PI * 2);
+    ctx.fillStyle = hg;
+    ctx.fill();
+    ctx.restore();
+
+    ctx.save();
+    ctx.globalAlpha = 0.6;
+    ctx.beginPath();
+    ctx.ellipse(cx + rr * 0.3, cy + rr * 0.45, rr * 0.22, rr * 0.09, 0.4, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(230,242,255,1)';
+    ctx.fill();
+    ctx.restore();
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, rr * 0.94, Math.PI * 1.1, Math.PI * 1.7);
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    const beads = [
+      { x: rr * 1.35, y: rr * 0.55, r: rr * 0.16 },
+      { x: -rr * 1.4, y: rr * 0.7, r: rr * 0.11 },
+      { x: rr * 0.9, y: -rr * 1.2, r: rr * 0.08 }
+    ];
+    beads.forEach(b => {
+      const bx = cx + b.x, by = cy + b.y, br = b.r;
+      const bg = ctx.createRadialGradient(bx - br * 0.35, by - br * 0.4, 0, bx, by, br);
+      bg.addColorStop(0, 'rgba(255,255,255,0.95)');
+      bg.addColorStop(0.5, 'rgba(190,205,225,0.9)');
+      bg.addColorStop(1, 'rgba(110,125,150,0.9)');
+      ctx.beginPath();
+      ctx.arc(bx, by, br, 0, Math.PI * 2);
+      ctx.fillStyle = bg;
+      ctx.fill();
+    });
+  }
+
+  function drawMercuryGas(cx, cy, R, t) {
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + R * 1.05, R * 0.85, R * 0.16, 0, 0, Math.PI * 2);
+    const lg = ctx.createRadialGradient(cx, cy + R * 1.05, 0, cx, cy + R * 1.05, R * 0.85);
+    lg.addColorStop(0, 'rgba(220,228,240,0.9)');
+    lg.addColorStop(1, 'rgba(120,135,160,0.6)');
+    ctx.fillStyle = lg;
+    ctx.fill();
+
+    for (let i = 0; i < 50; i++) {
+      const seed = i * 8.7 + 400;
+      const px = cx + (rand(seed) - 0.5) * R * 3.4;
+      const ph = (rand(seed + 3) + t * 0.14 * (0.5 + rand(seed + 5))) % 1;
+      const py = cy + R * 1.05 - ph * R * 2.4;
+      const size = R * (0.12 + rand(seed + 7) * 0.30) * (1 - ph * 0.4);
+      const alpha = (0.28 + rand(seed + 9) * 0.35) * Math.sin(ph * Math.PI);
+
+      const g = ctx.createRadialGradient(px, py, 0, px, py, size);
+      g.addColorStop(0, `rgba(200,175,230,${alpha})`);
+      g.addColorStop(0.6, `rgba(160,140,200,${alpha * 0.6})`);
+      g.addColorStop(1, 'rgba(140,120,180,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(px, py, size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    for (let i = 0; i < 12; i++) {
+      const seed = i * 5.1 + 500;
+      const bx = cx + (rand(seed) - 0.5) * R * 1.4;
+      const ph = (rand(seed + 3) + t * 0.9) % 1;
+      const by = cy + R * 1.05 - ph * R * 0.7;
+      const br = R * (0.04 + rand(seed + 7) * 0.07) * (1 - ph * 0.6);
+      ctx.beginPath();
+      ctx.arc(bx, by, br, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(210,200,240,${0.5 * (1 - ph)})`;
+      ctx.fill();
+    }
+  }
+
+  /* ==================== 绘制：碳 ==================== */
+  function drawCarbonBody(cx, cy, R, r, t, s) {
+    const glow = r.phase === 'burning' ? 1 : (r.phase === 'glowing' ? clamp((s.T - 300) / 150, 0, 1) : 0);
+    const color = r.phase === 'burning' ? [255, 110, 40] : (r.phase === 'glowing' ? [180, 70, 35] : [65, 68, 78]);
+
+    if (glow > 0.02) {
+      const rr = R * 2.4;
+      const g = ctx.createRadialGradient(cx, cy, R * 0.2, cx, cy, rr);
+      g.addColorStop(0, rgbaS(color, 0.5 * glow));
+      g.addColorStop(0.45, rgbaS(color, 0.15 * glow));
+      g.addColorStop(1, rgbaS(color, 0));
+      ctx.fillStyle = g;
+      ctx.fillRect(cx - rr, cy - rr, rr * 2, rr * 2);
+    }
+
+    const pts = [];
+    for (let i = 0; i < 6; i++) {
+      const a = (Math.PI / 3) * i - Math.PI / 6;
+      pts.push([Math.cos(a) * R, Math.sin(a) * R]);
+    }
+    const off = R * 0.13;
+
+    ctx.beginPath();
+    pts.forEach(([px, py], i) => {
+      const x = cx + px, y = cy + py + off;
+      i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    });
+    ctx.closePath();
+    ctx.fillStyle = rgbaS(darkC(color, 0.72), 0.9);
+    ctx.fill();
+
+    for (let i = 0; i < 6; i++) {
+      const [ax, ay] = pts[i];
+      const [bx, by] = pts[(i + 1) % 6];
+      if (ay > -R * 0.2 || by > -R * 0.2) {
+        ctx.beginPath();
+        ctx.moveTo(cx + ax, cy + ay);
+        ctx.lineTo(cx + bx, cy + by);
+        ctx.lineTo(cx + bx, cy + by + off);
+        ctx.lineTo(cx + ax, cy + ay + off);
+        ctx.closePath();
+        ctx.fillStyle = rgbaS(darkC(color, 0.5), 0.85);
+        ctx.fill();
+      }
+    }
+
+    ctx.beginPath();
+    pts.forEach(([px, py], i) => {
+      const x = cx + px, y = cy + py;
+      i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    });
+    ctx.closePath();
+
+    const g = ctx.createLinearGradient(cx - R, cy - R, cx + R, cy + R);
+    g.addColorStop(0, rgbS(lightC(color, 0.20)));
+    g.addColorStop(0.45, rgbS(color));
+    g.addColorStop(1, rgbS(darkC(color, 0.38)));
+    ctx.fillStyle = g;
+    ctx.fill();
+    ctx.strokeStyle = rgbaS(lightC(color, 0.35), 0.45);
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    ctx.save();
+    ctx.clip();
+    ctx.strokeStyle = rgbaS(lightC(color, 0.55), 0.10);
+    ctx.lineWidth = 1;
+    for (let k = 0; k < 3; k++) {
+      const rr = R * (0.30 + k * 0.24);
+      ctx.beginPath();
+      for (let j = 0; j < 6; j++) {
+        const a = (Math.PI / 3) * j - Math.PI / 6;
+        const x = cx + Math.cos(a) * rr;
+        const y = cy + Math.sin(a) * rr;
+        j ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+      }
+      ctx.closePath();
+      ctx.stroke();
+    }
+    for (let j = 0; j < 6; j++) {
+      const a = (Math.PI / 3) * j - Math.PI / 6;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + Math.cos(a) * R, cy + Math.sin(a) * R);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    if (r.phase === 'burning') {
+      drawFlames(cx, cy + R * 0.1, R * 1.0, t);
+    }
+
+    if (glow > 0.3) {
+      const n = Math.round(glow * 16);
+      for (let i = 0; i < n; i++) {
+        const seed = i * 11.3 + 600;
+        const ph = (rand(seed) + t * 0.7) % 1;
+        const px = cx + (rand(seed + 2) - 0.5) * R * 2.0;
+        const py = cy - R * 0.4 - ph * R * 1.6;
+        const a = (1 - ph) * glow * 0.9;
+        const sz = 1.5 + rand(seed + 5) * 2.2;
+        ctx.beginPath();
+        ctx.arc(px, py, sz, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255,220,120,${a})`;
+        ctx.fill();
+      }
+    }
+  }
+
+  function drawFlames(cx, baseY, size, t) {
+    const rr = size * 2.0;
+    const g = ctx.createRadialGradient(cx, baseY - size * 0.4, 0, cx, baseY - size * 0.4, rr);
+    g.addColorStop(0, 'rgba(255,200,100,0.55)');
+    g.addColorStop(0.4, 'rgba(255,120,40,0.25)');
+    g.addColorStop(1, 'rgba(255,80,20,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(cx - rr, baseY - rr - size, rr * 2, rr * 2 + size);
+
+    for (let i = 0; i < 5; i++) {
+      const seed = i * 13.7 + 700;
+      const fx = cx + (rand(seed) - 0.5) * size * 0.9;
+      const fh = size * (0.55 + rand(seed + 2) * 0.7) * (1 + 0.1 * Math.sin(t * 3 + i));
+      const baseW = size * (0.22 + rand(seed + 5) * 0.14);
+      const wob = Math.sin(t * 4.5 + i * 1.3) * size * 0.09;
+      const wob2 = Math.cos(t * 3.2 + i * 2.1) * size * 0.05;
+
+      ctx.beginPath();
+      ctx.moveTo(fx - baseW, baseY);
+      ctx.bezierCurveTo(fx - baseW * 1.1, baseY - fh * 0.35, fx + wob - baseW * 0.35, baseY - fh * 0.75, fx + wob + wob2, baseY - fh);
+      ctx.bezierCurveTo(fx + wob + wob2 + baseW * 0.35, baseY - fh * 0.75, fx + baseW * 1.1, baseY - fh * 0.35, fx + baseW, baseY);
+      ctx.closePath();
+
+      const fg = ctx.createLinearGradient(fx, baseY, fx, baseY - fh);
+      fg.addColorStop(0, 'rgba(255,230,130,0.95)');
+      fg.addColorStop(0.35, 'rgba(255,160,50,0.9)');
+      fg.addColorStop(0.75, 'rgba(255,80,30,0.6)');
+      fg.addColorStop(1, 'rgba(200,40,10,0)');
+      ctx.fillStyle = fg;
+      ctx.fill();
+    }
+  }
+
+  function drawDiamond(cx, cy, R, t) {
+    const glow = ctx.createRadialGradient(cx, cy, R * 0.2, cx, cy, R * 2.0);
+    glow.addColorStop(0, 'rgba(200,240,255,0.42)');
+    glow.addColorStop(0.5, 'rgba(180,220,255,0.12)');
+    glow.addColorStop(1, 'rgba(180,220,255,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(cx, cy, R * 2.0, 0, Math.PI * 2); ctx.fill();
+
+    const w = R * 1.6, h = R * 1.85;
+    const topW = w * 0.5;
+    const topY = cy - h * 0.45;
+    const girdleW = w;
+    const girdleY = cy - h * 0.08;
+    const bottomY = cy + h * 0.55;
+
+    ctx.beginPath();
+    ctx.moveTo(cx - topW / 2, topY);
+    ctx.lineTo(cx + topW / 2, topY);
+    ctx.lineTo(cx + girdleW / 2, girdleY);
+    ctx.lineTo(cx, bottomY);
+    ctx.lineTo(cx - girdleW / 2, girdleY);
+    ctx.closePath();
+
+    const g = ctx.createLinearGradient(cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2);
+    g.addColorStop(0, 'rgba(210,245,255,0.95)');
+    g.addColorStop(0.25, 'rgba(255,255,255,1)');
+    g.addColorStop(0.5, 'rgba(190,225,255,0.92)');
+    g.addColorStop(0.75, 'rgba(220,240,255,0.95)');
+    g.addColorStop(1, 'rgba(150,200,240,0.95)');
+    ctx.fillStyle = g;
+    ctx.fill();
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(cx - topW / 2, topY); ctx.lineTo(cx, girdleY);
+    ctx.moveTo(cx + topW / 2, topY); ctx.lineTo(cx, girdleY);
+    ctx.moveTo(cx - girdleW / 2, girdleY); ctx.lineTo(cx, girdleY);
+    ctx.moveTo(cx + girdleW / 2, girdleY); ctx.lineTo(cx, girdleY);
+    ctx.moveTo(cx, girdleY); ctx.lineTo(cx, bottomY);
+    ctx.moveTo(cx - topW / 2, topY); ctx.lineTo(cx, topY);
+    ctx.moveTo(cx - girdleW / 2, girdleY); ctx.lineTo(cx, bottomY);
+    ctx.moveTo(cx + girdleW / 2, girdleY); ctx.lineTo(cx, bottomY);
+    ctx.stroke();
+
+    for (let i = 0; i < 8; i++) {
+      const a = rand(i * 7.3) * Math.PI * 2;
+      const rr = R * (0.1 + rand(i * 3.1) * 0.45);
+      const px = cx + Math.cos(a) * rr;
+      const py = cy + Math.sin(a) * rr * 0.7;
+      const ph = (rand(i * 2.3) + t * 0.6) % 1;
+      const bright = Math.sin(ph * Math.PI);
+      const sz = R * 0.07 * bright;
+      if (sz > 0.5) {
+        ctx.save();
+        ctx.translate(px, py);
+        const sg = ctx.createRadialGradient(0, 0, 0, 0, 0, sz * 5);
+        sg.addColorStop(0, `rgba(255,255,255,${bright * 0.95})`);
+        sg.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = sg;
+        ctx.beginPath(); ctx.arc(0, 0, sz * 5, 0, Math.PI * 2); ctx.fill();
+
+        ctx.strokeStyle = `rgba(255,255,255,${bright * 0.8})`;
+        ctx.lineWidth = 1.2;
+        for (let k = 0; k < 4; k++) {
+          ctx.rotate(Math.PI / 2);
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.lineTo(0, -sz * 2.5);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+    }
+  }
+
+  /* ==================== 绘制：碘 ==================== */
+  function drawIodineSolid(cx, cy, R, t, s) {
+    const glow = ctx.createRadialGradient(cx, cy, R * 0.3, cx, cy, R * 1.7);
+    glow.addColorStop(0, 'rgba(160,110,210,0.22)');
+    glow.addColorStop(1, 'rgba(160,110,210,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(cx, cy, R * 1.7, 0, Math.PI * 2); ctx.fill();
+
+    const w = R * 1.2, h = R * 1.3;
+    const dx = R * 0.38, dy = R * 0.22;
+    const x0 = cx - (w + dx) / 2;
+    const y0 = cy - h / 2 + dy / 2;
+
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x0 + dx, y0 - dy);
+    ctx.lineTo(x0 + w + dx, y0 - dy);
+    ctx.lineTo(x0 + w, y0);
+    ctx.closePath();
+    ctx.fillStyle = '#4a2a6a';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(180,140,220,0.5)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(x0 + w, y0);
+    ctx.lineTo(x0 + w + dx, y0 - dy);
+    ctx.lineTo(x0 + w + dx, y0 - dy + h);
+    ctx.lineTo(x0 + w, y0 + h);
+    ctx.closePath();
+    ctx.fillStyle = '#3a2050';
+    ctx.fill();
+    ctx.stroke();
+
+    const fg = ctx.createLinearGradient(x0, y0, x0 + w, y0 + h);
+    fg.addColorStop(0, '#7a4a9a');
+    fg.addColorStop(0.5, '#5a3278');
+    fg.addColorStop(1, '#3a1f58');
+    ctx.fillStyle = fg;
+    ctx.fillRect(x0, y0, w, h);
+    ctx.strokeStyle = 'rgba(180,140,220,0.5)';
+    ctx.strokeRect(x0, y0, w, h);
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x0, y0, w, h);
+    ctx.clip();
+    for (let i = 0; i < 6; i++) {
+      const px = x0 + rand(i * 3.7) * w;
+      const py = y0 + rand(i * 7.7) * h;
+      const sz = R * (0.06 + rand(i * 5.3) * 0.14);
+      ctx.beginPath();
+      ctx.moveTo(px, py - sz);
+      ctx.lineTo(px + sz * 0.5, py);
+      ctx.lineTo(px, py + sz);
+      ctx.lineTo(px - sz * 0.5, py);
+      ctx.closePath();
+      ctx.fillStyle = `rgba(200,170,240,${0.15 + rand(i) * 0.25})`;
+      ctx.fill();
+    }
+    ctx.restore();
+
+    ctx.save();
+    ctx.globalAlpha = 0.35;
+    const hg = ctx.createLinearGradient(x0, y0, x0, y0 + h * 0.5);
+    hg.addColorStop(0, '#e0c8ff');
+    hg.addColorStop(1, 'rgba(224,200,255,0)');
+    ctx.fillStyle = hg;
+    ctx.fillRect(x0, y0, w, h * 0.5);
+    ctx.restore();
+
+    if (s.T > 50) {
+      const inten = clamp((s.T - 50) / 65, 0, 1);
+      const n = Math.round(inten * 22);
+      for (let i = 0; i < n; i++) {
+        const seed = i * 9.7 + 800;
+        const px = cx + (rand(seed) - 0.5) * R * 2.2;
+        const ph = (rand(seed + 3) + t * 0.22 * (0.5 + rand(seed + 5))) % 1;
+        const py = cy - R * 0.5 - ph * R * 2.0;
+        const size = R * (0.08 + rand(seed + 7) * 0.18) * (1 - ph * 0.4);
+        const alpha = inten * (0.25 + rand(seed + 9) * 0.35) * Math.sin(ph * Math.PI);
+        const g = ctx.createRadialGradient(px, py, 0, px, py, size);
+        g.addColorStop(0, `rgba(200,150,240,${alpha})`);
+        g.addColorStop(1, 'rgba(200,150,240,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(px, py, size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+
+  function drawIodineLiquid(cx, cy, R, t) {
+    const glow = ctx.createRadialGradient(cx, cy, R * 0.3, cx, cy, R * 1.8);
+    glow.addColorStop(0, 'rgba(160,100,210,0.25)');
+    glow.addColorStop(1, 'rgba(160,100,210,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(cx, cy, R * 1.8, 0, Math.PI * 2); ctx.fill();
+
+    const w = R * 1.9, h = R * 1.0;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + R * 0.18, w / 2, h / 2, 0, 0, Math.PI * 2);
+
+    const lg = ctx.createRadialGradient(cx - w * 0.15, cy - h * 0.15, 0, cx, cy, w * 0.7);
+    lg.addColorStop(0, '#b080e0');
+    lg.addColorStop(0.45, '#8a50c0');
+    lg.addColorStop(1, '#4a1f78');
+    ctx.fillStyle = lg;
+    ctx.fill();
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + R * 0.18, w / 2, h / 2, 0, 0, Math.PI * 2);
+    ctx.clip();
+    for (let i = 0; i < 4; i++) {
+      const yy = cy - h * 0.4 + (i / 3) * h;
+      ctx.beginPath();
+      for (let k = 0; k <= 24; k++) {
+        const px = cx - w / 2 + (k / 24) * w;
+        const py = yy + Math.sin(k * 0.7 + t * 2.2 + i * 1.4) * 3.5;
+        k === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+      }
+      ctx.strokeStyle = `rgba(220,190,255,${0.15 + i * 0.05})`;
+      ctx.lineWidth = 1.3;
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + R * 0.18, w / 2, h / 2, 0, Math.PI * 1.05, Math.PI * 1.85);
+    ctx.strokeStyle = 'rgba(230,210,255,0.65)';
+    ctx.lineWidth = 2.2;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+
+    for (let i = 0; i < 18; i++) {
+      const seed = i * 6.3 + 900;
+      const px = cx + (rand(seed) - 0.5) * w * 0.85;
+      const ph = (rand(seed + 3) + t * 0.25 * (0.5 + rand(seed + 5))) % 1;
+      const py = cy - R * 0.3 - ph * R * 1.8;
+      const size = R * (0.07 + rand(seed + 7) * 0.16) * (1 - ph * 0.4);
+      const alpha = (0.25 + rand(seed + 9) * 0.3) * Math.sin(ph * Math.PI);
+      const g = ctx.createRadialGradient(px, py, 0, px, py, size);
+      g.addColorStop(0, `rgba(200,150,240,${alpha})`);
+      g.addColorStop(1, 'rgba(200,150,240,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(px, py, size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  function drawIodineGas(cx, cy, R, t) {
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + R * 1.05, R * 0.9, R * 0.16, 0, 0, Math.PI * 2);
+    const lg = ctx.createRadialGradient(cx, cy + R * 1.05, 0, cx, cy + R * 1.05, R * 0.9);
+    lg.addColorStop(0, 'rgba(170,110,220,0.9)');
+    lg.addColorStop(1, 'rgba(80,40,140,0.6)');
+    ctx.fillStyle = lg;
+    ctx.fill();
+
+    for (let i = 0; i < 55; i++) {
+      const seed = i * 8.7 + 1000;
+      const px = cx + (rand(seed) - 0.5) * R * 3.6;
+      const ph = (rand(seed + 3) + t * 0.15 * (0.5 + rand(seed + 5))) % 1;
+      const py = cy + R * 1.05 - ph * R * 2.8;
+      const size = R * (0.13 + rand(seed + 7) * 0.34) * (1 - ph * 0.4);
+      const alpha = (0.3 + rand(seed + 9) * 0.4) * Math.sin(ph * Math.PI);
+
+      const g = ctx.createRadialGradient(px, py, 0, px, py, size);
+      g.addColorStop(0, `rgba(200,150,240,${alpha})`);
+      g.addColorStop(0.6, `rgba(160,110,200,${alpha * 0.6})`);
+      g.addColorStop(1, 'rgba(140,90,180,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(px, py, size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    for (let i = 0; i < 14; i++) {
+      const seed = i * 5.1 + 1100;
+      const bx = cx + (rand(seed) - 0.5) * R * 1.6;
+      const ph = (rand(seed + 3) + t * 0.9) % 1;
+      const by = cy + R * 1.05 - ph * R * 0.8;
+      const br = R * (0.04 + rand(seed + 7) * 0.08) * (1 - ph * 0.6);
+      ctx.beginPath();
+      ctx.arc(bx, by, br, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(200,170,240,${0.55 * (1 - ph)})`;
+      ctx.fill();
+    }
+  }
+
+  /* ==================== 环境背景 ==================== */
+  function drawChamber() {
+    const pad = 18;
+    const x = pad, y = pad, w = W - pad * 2, h = H - pad * 2;
+    if (w < 20 || h < 20) return;
+
+    const g = ctx.createLinearGradient(x, y, x, y + h);
+    g.addColorStop(0, '#141924');
+    g.addColorStop(1, '#090c11');
+
+    ctx.save();
+    roundRect(ctx, x, y, w, h, 18);
+    ctx.fillStyle = g;
+    ctx.fill();
+    ctx.clip();
+
+    ctx.strokeStyle = 'rgba(90,130,190,0.06)';
+    ctx.lineWidth = 1;
+    for (let gx = x; gx <= x + w; gx += 42) {
+      ctx.beginPath(); ctx.moveTo(gx, y); ctx.lineTo(gx, y + h); ctx.stroke();
+    }
+    for (let gy = y; gy <= y + h; gy += 42) {
+      ctx.beginPath(); ctx.moveTo(x, gy); ctx.lineTo(x + w, gy); ctx.stroke();
+    }
+
+    ctx.strokeStyle = 'rgba(79,209,197,0.22)';
+    ctx.lineWidth = 2;
+    const cl = 22;
+    const corners = [
+      [x + 12, y + 12, 1, 1], [x + w - 12, y + 12, -1, 1],
+      [x + 12, y + h - 12, 1, -1], [x + w - 12, y + h - 12, -1, -1]
+    ];
+    for (const [cx, cy, sx, sy] of corners) {
+      ctx.beginPath();
+      ctx.moveTo(cx + sx * cl, cy);
+      ctx.lineTo(cx, cy);
+      ctx.lineTo(cx, cy + sy * cl);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    roundRect(ctx, x, y, w, h, 18);
+    ctx.strokeStyle = '#2a3244';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.save();
+    ctx.font = '600 10px ui-monospace, monospace';
+    ctx.fillStyle = 'rgba(125,136,153,0.5)';
+    ctx.fillText('ENVIRONMENTAL CHAMBER', x + 26, y + 30);
+    ctx.restore();
+  }
+
+  function drawAtmosphere(t) {
+    const m = MATS[state.mat];
+    const span = m.sliders.T.max - m.sliders.T.min;
+    const ref = m.sliders.T.def;
+    const dT = state.T - ref;
+    const norm = clamp(Math.abs(dT) / (span * 0.5), 0, 1);
+    const cx = W / 2, cy = H / 2;
+
+    if (norm > 0.02) {
+      const warm = dT > 0;
+      const col = warm ? '255,140,80' : '90,150,255';
+      const rg = ctx.createRadialGradient(cx, cy, 30, cx, cy, Math.max(W, H) * 0.72);
+      rg.addColorStop(0, `rgba(${col},${norm * 0.18})`);
+      rg.addColorStop(1, `rgba(${col},0)`);
+      ctx.fillStyle = rg;
+      ctx.fillRect(0, 0, W, H);
+    }
+
+    const nP = Math.min(55, Math.round(norm * 55));
+    if (nP > 0) {
+      const warm = dT > 0;
+      const spd = 0.012 + norm * 0.06;
+      const col = warm ? '255,150,95' : '110,165,255';
+      for (let i = 0; i < nP; i++) {
+        const px = rand(i * 7.13) * W;
+        const frac = (rand(i * 3.31) + t * spd) % 1;
+        const py = warm ? (1 - frac) * H : frac * H;
+        const r = 1 + rand(i * 5.7) * 1.6;
+        ctx.beginPath();
+        ctx.arc(px, py, r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${col},${0.09 + rand(i * 2.2) * 0.22})`;
+        ctx.fill();
+      }
+    }
+
+    const pNorm = clamp((state.P - 10) / (m.sliders.P.max - 10), 0, 1);
+    if (pNorm > 0.03) {
+      const alpha = 0.05 + pNorm * 0.30;
+      const inset = 46;
+      const len = 12 + pNorm * 20;
+      ctx.strokeStyle = `rgba(120,180,255,${alpha})`;
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
+      const arrows = [
+        [inset, cy, 1, 0], [W - inset, cy, -1, 0],
+        [cx, inset, 0, 1], [cx, H - inset, 0, -1]
+      ];
+      for (const [ax, ay, dx, dy] of arrows) {
+        const ex = ax + dx * len, ey = ay + dy * len;
+        ctx.beginPath();
+        ctx.moveTo(ax, ay);
+        ctx.lineTo(ex, ey);
+        ctx.stroke();
+        const hx = dx !== 0 ? ex - dx * 5 : ex;
+        const hy = dy !== 0 ? ey - dy * 5 : ey;
+        ctx.beginPath();
+        ctx.moveTo(ex, ey);
+        ctx.lineTo(hx - dy * 4, hy - dx * 4);
+        ctx.moveTo(ex, ey);
+        ctx.lineTo(hx + dy * 4, hy + dx * 4);
+        ctx.stroke();
+      }
+    }
+  }
+
+  /* ==================== 顶部 HUD ==================== */
+  function drawHUD() {
+    const m = MATS[state.mat];
+    if (!res) return;
+
+    const txt = m.hudText(res);
+    const col = m.hudColor(res);
+
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.font = '700 20px ui-monospace, SFMono-Regular, Menlo, monospace';
+    ctx.fillStyle = col;
+    ctx.shadowColor = col;
+    ctx.shadowBlur = 16;
+    ctx.fillText(txt, W / 2, 34);
+    ctx.restore();
+
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.font = '500 11px -apple-system, "PingFang SC", sans-serif';
+    ctx.fillStyle = 'rgba(140,155,175,0.7)';
+    ctx.fillText(m.name + ' · ' + m.sub, W / 2, 54);
+    ctx.restore();
+  }
+
+  /* ==================== 主循环 ==================== */
+  function frame(ts) {
+    const t = ts / 1000;
+    ctx.clearRect(0, 0, W, H);
+
+    drawChamber();
+    drawAtmosphere(t);
+
+    if (res) {
+      const m = MATS[state.mat];
+      m.draw(state, res, t);
+      drawHUD();
+    }
+
+    requestAnimationFrame(frame);
+  }
+
+  /* ==================== UI ==================== */
+  const matBtnsEl = $('matBtns');
+  Object.entries(MATS).forEach(([key, m]) => {
+    const b = document.createElement('button');
+    b.className = 'matbtn' + (key === state.mat ? ' active' : '');
+    b.dataset.key = key;
+    b.innerHTML = `<span class="dot" style="background:${m.dot}"></span>${m.name}`;
+    b.addEventListener('click', () => selectMaterial(key));
+    matBtnsEl.appendChild(b);
+  });
+
+  const sT = $('sT'), sP = $('sP');
+  sT.addEventListener('input', () => { state.T = +sT.value; update(); });
+  sP.addEventListener('input', () => { state.P = +sP.value; update(); });
+
+  function selectMaterial(key) {
+    state.mat = key;
+    const m = MATS[key];
+    state.T = m.sliders.T.def;
+    state.P = m.sliders.P.def;
+    prevPhase = null;
+
+    document.querySelectorAll('.matbtn').forEach(el =>
+      el.classList.toggle('active', el.dataset.key === key)
+    );
+
+    syncSliders();
+    renderPresets();
+    update();
+  }
+
+  function syncSliders() {
+    const m = MATS[state.mat];
+    sT.min = m.sliders.T.min; sT.max = m.sliders.T.max; sT.step = m.sliders.T.step; sT.value = state.T;
+    sP.min = m.sliders.P.min; sP.max = m.sliders.P.max; sP.step = m.sliders.P.step; sP.value = state.P;
+    $('lblT').textContent = m.sliders.T.label;
+    $('lblP').textContent = m.sliders.P.label;
+  }
+
+  function renderPresets() {
+    const m = MATS[state.mat];
+    const el = $('presets');
+    el.innerHTML = '';
+    m.presets.forEach(p => {
+      const b = document.createElement('button');
+      b.className = 'pbtn';
+      b.textContent = p.label;
+      b.addEventListener('click', () => {
+        state.T = p.T; state.P = p.P;
+        sT.value = p.T; sP.value = p.P;
+        update();
+      });
+      el.appendChild(b);
+    });
+  }
+
+  function update() {
+    const m = MATS[state.mat];
+    res = m.compute(state);
+
+    if (res.phase !== prevPhase) {
+      prevPhase = res.phase;
+      phaseChangeT = performance.now() / 1000;
+    }
+
+    $('vT').textContent = state.T + ' ' + m.sliders.T.unit;
+    $('vP').textContent = state.P + ' ' + m.sliders.P.unit;
+
+    const items = m.readouts(state, res);
+    $('readout').innerHTML = items.map(it => `
+      <div class="card${it.wide ? ' wide' : ''}">
+        <div class="card-lbl">${it.label}</div>
+        <div class="card-num" style="${it.color ? 'color:' + it.color : ''}">
+          ${it.value}${it.unit ? `<small>${it.unit}</small>` : ''}
+        </div>
+      </div>
+    `).join('');
+
+    $('phaserow').innerHTML = m.phases.map(p => `
+      <div class="phase-chip${res.phase === p.key ? ' on' : ''}"
+           style="${res.phase === p.key ? `background:${p.color};color:#fff` : ''}">
+        ${p.name}
+      </div>
+    `).join('');
+
+    $('phaseDesc').innerHTML = m.phaseDesc(state, res);
+    $('note').innerHTML = m.note;
+  }
+
+  /* ==================== 启动 ==================== */
+  syncSliders();
+  renderPresets();
+  update();
+  requestAnimationFrame(frame);
+
+})();
+</script>
+</body>
+</html>
